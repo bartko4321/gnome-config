@@ -91,8 +91,7 @@ TOTAL_STEPS=12
 # ── Zmienne globalne ─────────────────────────────────────────
 CURRENT_USER=$(whoami)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
-USER_PICTURES="$HOME/Obrazy"
-[[ -d "$HOME/Pictures" ]] && USER_PICTURES="$HOME/Pictures"
+USER_PICTURES="$(xdg-user-dir PICTURES 2>/dev/null || echo "$HOME/Pictures")"
 wallpaper_PATH="$USER_PICTURES/wallpaper.jpg"
 LOGIN_WALLPAPER_PATH="/usr/share/backgrounds/custom/login-wallpaper.png"
 
