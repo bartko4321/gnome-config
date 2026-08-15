@@ -53,7 +53,7 @@ log_ok()    { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${SUCCESS}✔ $m${NC
 log_err()   { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${ERROR}✘ ERROR: $m${NC}"; }
 log_warn()  { local m; m="$(_pick_msg "$1" "$2")"; echo -e "${WARN}⚠ WARN: $m${NC}"; }
 
-trap 'log_err "Skrypt zakończył się błędem w linii $LINENO. Polecenie: $BASH_COMMAND" "Script failed at line $LINENO. Command: $BASH_COMMAND"' ERR
+trap 'log_err "Błąd w linii $LINENO. Polecenie: $BASH_COMMAND" "Error at line $LINENO. Command: $BASH_COMMAND"' ERR
 
 show_progress() {
     local step=$1
@@ -131,17 +131,12 @@ detect_os() {
         OS="${ID:-}"
         OS_LIKE="${ID_LIKE:-}"
     else
-        log_warn "Brak pliku /etc/os-release. Pomijam automatyczną instalację pakietów." \
-                 "Missing /etc/os-release file. Skipping automatic package installation."
         OS="unknown"
         OS_LIKE=""
     fi
 }
 
 install_gnome_packages() {
-    log_info "Wykrywanie dystrybucji i instalacja GNOME Tweaks oraz Extensions..." \
-             "Detecting distribution and installing GNOME Tweaks and Extensions..."
-
     if [[ "$OS" == *"ubuntu"* || "$OS" == *"debian"* || "$OS_LIKE" == *"ubuntu"* || "$OS_LIKE" == *"debian"* || "$OS" == *"pop"* || "$OS" == *"linuxmint"* ]]; then
         sudo apt-get update -yq
         sudo apt-get install -yq gnome-tweaks gnome-shell-extension-prefs gnome-shell-extensions
@@ -151,13 +146,7 @@ install_gnome_packages() {
         sudo pacman -S --noconfirm --needed gnome-tweaks gnome-shell-extensions
     elif [[ "$OS" == *"opensuse"* || "$OS" == *"suse"* || "$OS_LIKE" == *"suse"* ]]; then
         sudo zypper install -yqn gnome-tweaks gnome-shell-extensions
-    else
-        log_warn "Nierozpoznana dystrybucja ($OS / $OS_LIKE). Zainstaluj pakiety ręcznie." \
-                 "Unrecognized distribution ($OS / $OS_LIKE). Install packages manually."
     fi
-
-    log_ok "Instalacja pakietów systemowych zakończona." \
-           "System packages installation completed."
 }
 
 detect_os
@@ -171,22 +160,15 @@ show_progress 4 $TOTAL_STEPS "$MSG_PHASE_2"
 # ==========================================================
 show_progress 5 $TOTAL_STEPS "$MSG_PHASE_3"
 
-log_info "Kopiowanie plików konfiguracyjnych..." \
-         "Copying configuration files..."
-
 if [[ -d "$SCRIPT_DIR/.config" ]]; then cp -af "$SCRIPT_DIR/.config/." ~/.config/; fi
 if [[ -d "$SCRIPT_DIR/.local" ]]; then cp -af "$SCRIPT_DIR/.local/." ~/.local/; fi
 
 if [[ -d "$SCRIPT_DIR/.local/share" ]]; then
-    log_info "Kopiowanie zawartości .local/share..." \
-             "Copying .local/share contents..."
     mkdir -p ~/.local/share
     cp -af "$SCRIPT_DIR/.local/share/." ~/.local/share/
 fi
 
 if [[ -d "$SCRIPT_DIR/.icons" ]]; then
-    log_info "Kopiowanie zawartości .icons do katalogu domowego..." \
-             "Copying .icons contents to home directory..."
     mkdir -p ~/.icons
     cp -af "$SCRIPT_DIR/.icons/." ~/.icons/
 fi
@@ -199,31 +181,16 @@ fi
 show_progress 6 $TOTAL_STEPS "$MSG_PHASE_3"
 
 if command -v gsettings >/dev/null 2>&1; then
-    log_info "Ustawiam tapetę pulpitu w systemie GNOME..." \
-             "Setting desktop wallpaper in GNOME..."
-
-    if gsettings set org.gnome.desktop.background picture-uri "file://$wallpaper_PATH" 2>/dev/null \
+    gsettings set org.gnome.desktop.background picture-uri "file://$wallpaper_PATH" 2>/dev/null \
         && gsettings set org.gnome.desktop.background picture-uri-dark "file://$wallpaper_PATH" 2>/dev/null \
-        && gsettings set org.gnome.desktop.background picture-options "zoom" 2>/dev/null; then
-        log_ok "Tapeta pulpitu GNOME została zaktualizowana." \
-               "GNOME desktop wallpaper updated."
-    else
-        log_warn "Nie udało się ustawić tapety GNOME." \
-                 "Failed to set GNOME wallpaper."
-    fi
+        && gsettings set org.gnome.desktop.background picture-options "zoom" 2>/dev/null || true
 
     gsettings set org.gnome.desktop.screensaver picture-uri "file://$LOGIN_WALLPAPER_PATH" 2>/dev/null || true
     gsettings set org.gnome.desktop.screensaver picture-uri-dark "file://$LOGIN_WALLPAPER_PATH" 2>/dev/null || true
     gsettings set org.gnome.desktop.screensaver picture-options "zoom" 2>/dev/null || true
-else
-    log_warn "gsettings nie znaleziony — pomijam automatyczną zmianę tapety." \
-             "gsettings not found — skipping automatic wallpaper change."
 fi
 
 show_progress 7 $TOTAL_STEPS "$MSG_PHASE_3"
-
-log_info "Ustawianie tła ekranu logowania GDM przez dconf..." \
-         "Setting GDM login screen background via dconf..."
 
 if [[ -f "$SCRIPT_DIR/login-wallpaper.png" ]]; then
     sudo mkdir -p /usr/share/backgrounds/custom
@@ -248,51 +215,28 @@ picture-uri-dark='file://$LOGIN_WALLPAPER_PATH'
 picture-options='zoom'
 EOF
 
-    if sudo dconf update; then
-        log_ok "Tło ekranu logowania GDM zostało ustawione (dconf)." \
-               "GDM login screen background set (dconf)."
-    else
+    if ! sudo dconf update; then
         log_err "Błąd podczas 'dconf update' dla bazy gdm." \
                 "Error during 'dconf update' for gdm database."
     fi
-else
-    log_warn "Nie znaleziono pliku login-wallpaper.png — pomijam tapetę ekranu logowania." \
-             "login-wallpaper.png not found — skipping login screen wallpaper."
 fi
 
 show_progress 8 $TOTAL_STEPS "$MSG_PHASE_3"
 
 if [[ -f "$SCRIPT_DIR/dconf-settings.ini" ]]; then
     if command -v dconf &>/dev/null; then
-        log_info "Czyszczenie pliku INI..." \
-                 "Cleaning INI file..."
         sed -i 's/\r$//' "$SCRIPT_DIR/dconf-settings.ini"
 
         mkdir -p "$HOME/.config/dconf"
 
-        log_info "Wczytywanie ustawień dconf dla użytkownika $CURRENT_USER..." \
-                 "Loading dconf settings for user $CURRENT_USER..."
-
-        if dconf load / < "$SCRIPT_DIR/dconf-settings.ini"; then
-            log_ok "Wczytano ustawienia dconf pomyślnie!" \
-                   "dconf settings loaded successfully!"
-        else
+        if ! dconf load / < "$SCRIPT_DIR/dconf-settings.ini"; then
             log_err "Błąd podczas ładowania ustawień dconf." \
                     "Error while loading dconf settings."
         fi
-    else
-        log_warn "Polecenie 'dconf' jest niedostępne — pomijam wczytywanie." \
-                 "'dconf' command unavailable — skipping load."
     fi
-else
-    log_warn "Nie znaleziono dconf-settings.ini — pomijam wczytywanie." \
-             "dconf-settings.ini not found — skipping load."
 fi
 
 show_progress 9 $TOTAL_STEPS "$MSG_PHASE_3"
-
-log_info "Instalacja narzędzia gnome-extensions-cli oraz rozszerzeń GNOME..." \
-         "Installing gnome-extensions-cli and GNOME extensions..."
 
 if command -v pipx &>/dev/null; then
     pipx install gnome-extensions-cli --force || true
@@ -303,8 +247,6 @@ if command -v pipx &>/dev/null; then
     fi
 
     if [[ -x "$GEXT_CMD" ]] || command -v gext &>/dev/null; then
-        log_info "Pobieranie i aktywacja rozszerzeń GNOME..." \
-                 "Downloading and activating GNOME extensions..."
         "$GEXT_CMD" install \
             blur-my-shell@aunetx \
             clipboard-history@alexsaveau.dev \
@@ -312,24 +254,13 @@ if command -v pipx &>/dev/null; then
             compiz-windows-effect@hermes83.github.com \
             dash-to-dock@micxgx.gmail.com \
             netspeedindicator@subashghimire.info.np \
-            weatherpanel@attentivecoder || log_warn "Niektóre rozszerzenia mogły wymagać ponownego zalogowania do aktywacji." \
-                                                    "Some extensions may require a re-login to activate."
-        log_ok "Instalacja rozszerzeń GNOME zakończona." \
-               "GNOME extensions installation completed."
-    else
-        log_warn "Nie udało się zlokalizować 'gext' w ścieżce wywoływalnej — pomijam rozszerzenia." \
-                 "Failed to locate 'gext' in PATH — skipping extensions."
+            weatherpanel@attentivecoder || true
     fi
-else
-    log_warn "Brak zainstalowanego 'pipx' — pomijam instalację rozszerzeń GNOME." \
-             "'pipx' is not installed — skipping GNOME extensions installation."
 fi
 
 show_progress 10 $TOTAL_STEPS "$MSG_PHASE_3"
 
 if [[ -f "$SCRIPT_DIR/piwo.png" ]]; then
-    log_info "Ustawiam avatar użytkownika..." \
-             "Setting user avatar..."
     AVATAR_DEST="/var/lib/AccountsService/icons/$CURRENT_USER"
     sudo mkdir -p "$(dirname "$AVATAR_DEST")"
     sudo cp -af "$SCRIPT_DIR/piwo.png" "$AVATAR_DEST"
@@ -347,11 +278,6 @@ if [[ -f "$SCRIPT_DIR/piwo.png" ]]; then
     else
         echo -e "[User]\nIcon=$AVATAR_DEST" | sudo tee "$ACCOUNTS_FILE" > /dev/null
     fi
-    log_ok "Avatar użytkownika został ustawiony." \
-           "User avatar set."
-else
-    log_warn "Nie znaleziono pliku piwo.png — pomijam ustawienie avatara." \
-             "piwo.png not found — skipping avatar setup."
 fi
 
 show_progress 11 $TOTAL_STEPS "$MSG_PHASE_3"
