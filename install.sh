@@ -3,7 +3,7 @@
 # SKRYPT KONFIGURACJI WIZUALNEJ GNOME
 # ==========================================================
 
-set -euo pipefail
+set -Eeuo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 detect_system_lang() {
@@ -43,7 +43,8 @@ cleanup_on_exit() {
             echo -e "${ERROR}✘ An error occurred (code: $exit_code). Detailed log saved to: $LOG_FILE${NC}" >&3
         fi
     fi
-    rm -f "$TMP_LOG"
+    sudo rm -f /etc/sudoers.d/99-temp-installer 2>/dev/null || true
+    rm -f "$TMP_LOG" 2>/dev/null || true
 }
 trap cleanup_on_exit EXIT
 
@@ -108,16 +109,17 @@ USER_PICTURES="$(xdg-user-dir PICTURES 2>/dev/null || echo "$HOME/Pictures")"
 wallpaper_PATH="$USER_PICTURES/wallpaper.jpg"
 LOGIN_WALLPAPER_PATH="/usr/share/backgrounds/custom/login-wallpaper.png"
 
-# ==========================================================
-# 1. WSTĘPNE SPRAWDZENIA I UPRAWNIENIA
-# ==========================================================
-show_progress 0 $TOTAL_STEPS "$MSG_PHASE_1"
-
 if [[ "$EUID" -eq 0 ]]; then
     echo -e "${ERROR}✘ Nie uruchamiaj skryptu jako root. Uruchom jako zwykły użytkownik z sudo.${NC}" >&3
     exit 1
 fi
 
+# ==========================================================
+# 1. WSTĘPNE SPRAWDZENIA I UPRAWNIENIA
+# ==========================================================
+show_progress 0 $TOTAL_STEPS "$MSG_PHASE_1"
+
+sudo -v
 echo "$CURRENT_USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/99-temp-installer > /dev/null
 
 show_progress 1 $TOTAL_STEPS "$MSG_PHASE_1"
