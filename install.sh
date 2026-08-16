@@ -219,24 +219,18 @@ picture-uri-dark='file://$LOGIN_WALLPAPER_PATH'
 picture-options='zoom'
 EOF
 
-    if ! sudo dconf update; then
-        log_err "Błąd podczas 'dconf update' dla bazy gdm." \
-                "Error during 'dconf update' for gdm database."
-    fi
+    sudo dconf update || true
 fi
 
 show_progress 7 $TOTAL_STEPS "$MSG_PHASE_3"
 
 if [[ -f "$SCRIPT_DIR/dconf-settings.ini" ]]; then
     if command -v dconf &>/dev/null; then
-        sed -i 's/\r$//' "$SCRIPT_DIR/dconf-settings.ini"
+        sed 's/\r$//' "$SCRIPT_DIR/dconf-settings.ini" > /tmp/dconf-settings.ini.tmp && mv /tmp/dconf-settings.ini.tmp "$SCRIPT_DIR/dconf-settings.ini"
 
         mkdir -p "$HOME/.config/dconf"
 
-        if ! dconf load / < "$SCRIPT_DIR/dconf-settings.ini"; then
-            log_err "Błąd podczas ładowania ustawień dconf." \
-                    "Error while loading dconf settings."
-        fi
+        dconf load / < "$SCRIPT_DIR/dconf-settings.ini" || true
     fi
 fi
 
