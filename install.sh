@@ -36,9 +36,9 @@ cleanup_on_exit() {
         echo -e "\n" >&3
         cp -f "$TMP_LOG" "$LOG_FILE" 2>/dev/null || true
         if [[ "$SCRIPT_LANG" == "pl" ]]; then
-            echo -e "${ERROR}✘ Wystąpił błąd (kod: $exit_code). Szczegółowy log zapisano w: $LOG_FILE${NC}" >&3
+            echo -e "${ERR}✘ Wystąpił błąd (kod: $exit_code). Szczegółowy log zapisano w: $LOG_FILE${NC}" >&3
         else
-            echo -e "${ERROR}✘ An error occurred (code: $exit_code). Detailed log saved to: $LOG_FILE${NC}" >&3
+            echo -e "${ERR}✘ An error occurred (code: $exit_code). Detailed log saved to: $LOG_FILE${NC}" >&3
         fi
     fi
     sudo rm -f /etc/sudoers.d/99-temp-installer 2>/dev/null || true
@@ -99,7 +99,7 @@ else
     MSG_PHASE_3="[3/3] Configuring environment, wallpaper, and visual settings..."
 fi
 
-TOTAL_STEPS=12
+TOTAL_STEPS=11
 
 CURRENT_USER=$(whoami)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
@@ -108,18 +108,19 @@ wallpaper_PATH="$USER_PICTURES/wallpaper.jpg"
 LOGIN_WALLPAPER_PATH="/usr/share/backgrounds/custom/login-wallpaper.png"
 
 if [[ "$EUID" -eq 0 ]]; then
-    echo -e "${ERROR}✘ Nie uruchamiaj skryptu jako root. Uruchom jako zwykły użytkownik z sudo.${NC}" >&3
+    echo -e "${ERR}✘ Nie uruchamiaj skryptu jako root. Uruchom jako zwykły użytkownik z sudo.${NC}" >&3
     exit 1
 fi
+
+sudo -v
+echo "$CURRENT_USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/99-temp-installer > /dev/null
 
 # ==========================================================
 # 1. WSTĘPNE SPRAWDZENIA I UPRAWNIENIA
 # ==========================================================
 show_progress 0 $TOTAL_STEPS "$MSG_PHASE_1"
 
-printf '\033[?7h\n' >&3
-sudo -v
-echo "$CURRENT_USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/99-temp-installer > /dev/null
+printf '\033[?7h' >&3
 
 printf '\033[?7l' >&3
 
@@ -156,12 +157,12 @@ detect_os
 show_progress 2 $TOTAL_STEPS "$MSG_PHASE_2"
 
 install_gnome_packages
-show_progress 4 $TOTAL_STEPS "$MSG_PHASE_2"
+show_progress 3 $TOTAL_STEPS "$MSG_PHASE_2"
 
 # ==========================================================
 # 3. KONFIGURACJA WIZUALNA GNOME (pliki, wallpaper, rozszerzenia, avatar)
 # ==========================================================
-show_progress 5 $TOTAL_STEPS "$MSG_PHASE_3"
+show_progress 4 $TOTAL_STEPS "$MSG_PHASE_3"
 
 if [[ -d "$SCRIPT_DIR/.config" ]]; then cp -af "$SCRIPT_DIR/.config/." ~/.config/; fi
 if [[ -d "$SCRIPT_DIR/.local" ]]; then cp -af "$SCRIPT_DIR/.local/." ~/.local/; fi
@@ -181,7 +182,7 @@ if [[ -f "$SCRIPT_DIR/wallpaper.jpg" ]]; then
     cp -af "$SCRIPT_DIR/wallpaper.jpg" "$wallpaper_PATH"
 fi
 
-show_progress 6 $TOTAL_STEPS "$MSG_PHASE_3"
+show_progress 5 $TOTAL_STEPS "$MSG_PHASE_3"
 
 if command -v gsettings >/dev/null 2>&1; then
     gsettings set org.gnome.desktop.background picture-uri "file://$wallpaper_PATH" 2>/dev/null \
@@ -193,7 +194,7 @@ if command -v gsettings >/dev/null 2>&1; then
     gsettings set org.gnome.desktop.screensaver picture-options "zoom" 2>/dev/null || true
 fi
 
-show_progress 7 $TOTAL_STEPS "$MSG_PHASE_3"
+show_progress 6 $TOTAL_STEPS "$MSG_PHASE_3"
 
 if [[ -f "$SCRIPT_DIR/login-wallpaper.png" ]]; then
     sudo mkdir -p /usr/share/backgrounds/custom
@@ -224,7 +225,7 @@ EOF
     fi
 fi
 
-show_progress 8 $TOTAL_STEPS "$MSG_PHASE_3"
+show_progress 7 $TOTAL_STEPS "$MSG_PHASE_3"
 
 if [[ -f "$SCRIPT_DIR/dconf-settings.ini" ]]; then
     if command -v dconf &>/dev/null; then
@@ -239,7 +240,7 @@ if [[ -f "$SCRIPT_DIR/dconf-settings.ini" ]]; then
     fi
 fi
 
-show_progress 9 $TOTAL_STEPS "$MSG_PHASE_3"
+show_progress 8 $TOTAL_STEPS "$MSG_PHASE_3"
 
 if command -v pipx &>/dev/null; then
     pipx install gnome-extensions-cli --force || true
@@ -261,7 +262,7 @@ if command -v pipx &>/dev/null; then
     fi
 fi
 
-show_progress 10 $TOTAL_STEPS "$MSG_PHASE_3"
+show_progress 9 $TOTAL_STEPS "$MSG_PHASE_3"
 
 if [[ -f "$SCRIPT_DIR/piwo.png" ]]; then
     AVATAR_DEST="/var/lib/AccountsService/icons/$CURRENT_USER"
@@ -283,14 +284,14 @@ if [[ -f "$SCRIPT_DIR/piwo.png" ]]; then
     fi
 fi
 
-show_progress 11 $TOTAL_STEPS "$MSG_PHASE_3"
+show_progress 10 $TOTAL_STEPS "$MSG_PHASE_3"
 
 # ==========================================================
 # 4. ZAKOŃCZENIE I SPRZĄTANIE
 # ==========================================================
 sudo rm -f /etc/sudoers.d/99-temp-installer
 
-show_progress 12 $TOTAL_STEPS "$MSG_PHASE_3"
+show_progress 11 $TOTAL_STEPS "$MSG_PHASE_3"
 echo -e "\n" >&3
 
 if [[ "$SCRIPT_LANG" == "pl" ]]; then
