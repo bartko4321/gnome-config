@@ -142,14 +142,22 @@ detect_os() {
 
 install_gnome_packages() {
     if [[ "$OS" == *"ubuntu"* || "$OS" == *"debian"* || "$OS_LIKE" == *"ubuntu"* || "$OS_LIKE" == *"debian"* || "$OS" == *"pop"* || "$OS" == *"linuxmint"* ]]; then
-        sudo apt-get update -yq
-        sudo apt-get install -yq gnome-tweaks gnome-shell-extension-prefs gnome-shell-extensions
+        sudo apt-get update -yq || true
+        for pkg in gnome-tweaks gnome-shell-extension-prefs gnome-shell-extensions; do
+            sudo apt-get install -yq "$pkg" || true
+        done
     elif [[ "$OS" == "fedora" || "$OS_LIKE" == *"fedora"* ]]; then
-        sudo dnf install -yq gnome-tweaks gnome-extensions-app
+        for pkg in gnome-tweaks gnome-extensions-app; do
+            sudo dnf install -yq "$pkg" || true
+        done
     elif [[ "$OS" == "arch" || "$OS_LIKE" == *"arch"* || "$OS" == "manjaro" ]]; then
-        sudo pacman -S --noconfirm --needed gnome-tweaks gnome-shell-extensions
+        for pkg in gnome-tweaks gnome-shell-extensions; do
+            sudo pacman -S --noconfirm --needed "$pkg" || true
+        done
     elif [[ "$OS" == *"opensuse"* || "$OS" == *"suse"* || "$OS_LIKE" == *"suse"* ]]; then
-        sudo zypper install -yqn gnome-tweaks gnome-shell-extensions
+        for pkg in gnome-tweaks gnome-shell-extensions; do
+            sudo zypper install -yqn "$pkg" || true
+        done
     fi
 }
 
@@ -164,22 +172,22 @@ show_progress 3 $TOTAL_STEPS "$MSG_PHASE_2"
 # ==========================================================
 show_progress 4 $TOTAL_STEPS "$MSG_PHASE_3"
 
-if [[ -d "$SCRIPT_DIR/.config" ]]; then cp -af "$SCRIPT_DIR/.config/." ~/.config/; fi
-if [[ -d "$SCRIPT_DIR/.local" ]]; then cp -af "$SCRIPT_DIR/.local/." ~/.local/; fi
+if [[ -d "$SCRIPT_DIR/.config" ]]; then cp -af "$SCRIPT_DIR/.config/." ~/.config/ || true; fi
+if [[ -d "$SCRIPT_DIR/.local" ]]; then cp -af "$SCRIPT_DIR/.local/." ~/.local/ || true; fi
 
 if [[ -d "$SCRIPT_DIR/.local/share" ]]; then
     mkdir -p ~/.local/share
-    cp -af "$SCRIPT_DIR/.local/share/." ~/.local/share/
+    cp -af "$SCRIPT_DIR/.local/share/." ~/.local/share/ || true
 fi
 
 if [[ -d "$SCRIPT_DIR/.icons" ]]; then
     mkdir -p ~/.icons
-    cp -af "$SCRIPT_DIR/.icons/." ~/.icons/
+    cp -af "$SCRIPT_DIR/.icons/." ~/.icons/ || true
 fi
 
 if [[ -f "$SCRIPT_DIR/wallpaper.jpg" ]]; then
     mkdir -p "$(dirname "$wallpaper_PATH")"
-    cp -af "$SCRIPT_DIR/wallpaper.jpg" "$wallpaper_PATH"
+    cp -af "$SCRIPT_DIR/wallpaper.jpg" "$wallpaper_PATH" || true
 fi
 
 show_progress 5 $TOTAL_STEPS "$MSG_PHASE_3"
@@ -197,12 +205,12 @@ fi
 show_progress 6 $TOTAL_STEPS "$MSG_PHASE_3"
 
 if [[ -f "$SCRIPT_DIR/login-wallpaper.png" ]]; then
-    sudo mkdir -p /usr/share/backgrounds/custom
-    sudo cp -af "$SCRIPT_DIR/login-wallpaper.png" "$LOGIN_WALLPAPER_PATH"
-    sudo chmod 755 /usr/share/backgrounds/custom
-    sudo chmod 644 "$LOGIN_WALLPAPER_PATH"
+    sudo mkdir -p /usr/share/backgrounds/custom || true
+    sudo cp -af "$SCRIPT_DIR/login-wallpaper.png" "$LOGIN_WALLPAPER_PATH" || true
+    sudo chmod 755 /usr/share/backgrounds/custom || true
+    sudo chmod 644 "$LOGIN_WALLPAPER_PATH" || true
 
-    sudo mkdir -p /etc/dconf/profile /etc/dconf/db/gdm.d
+    sudo mkdir -p /etc/dconf/profile /etc/dconf/db/gdm.d || true
 
     if [[ ! -f /etc/dconf/profile/gdm ]]; then
         cat <<'EOF' | sudo tee /etc/dconf/profile/gdm > /dev/null
@@ -245,14 +253,16 @@ if command -v pipx &>/dev/null; then
     fi
 
     if [[ -x "$GEXT_CMD" ]] || command -v gext &>/dev/null; then
-        "$GEXT_CMD" install \
+        for ext in \
             blur-my-shell@aunetx \
             clipboard-history@alexsaveau.dev \
             compiz-alike-magic-lamp-effect@hermes83.github.com \
             compiz-windows-effect@hermes83.github.com \
             dash-to-dock@micxgx.gmail.com \
             netspeedindicator@subashghimire.info.np \
-            weatherpanel@attentivecoder || true
+            weatherpanel@attentivecoder; do
+            "$GEXT_CMD" install "$ext" || true
+        done
     fi
 fi
 
@@ -260,16 +270,16 @@ show_progress 9 $TOTAL_STEPS "$MSG_PHASE_3"
 
 if [[ -f "$SCRIPT_DIR/piwo.png" ]]; then
     AVATAR_DEST="/var/lib/AccountsService/icons/$CURRENT_USER"
-    sudo mkdir -p "$(dirname "$AVATAR_DEST")"
-    sudo cp -af "$SCRIPT_DIR/piwo.png" "$AVATAR_DEST"
-    sudo chmod 644 "$AVATAR_DEST"
+    sudo mkdir -p "$(dirname "$AVATAR_DEST")" || true
+    sudo cp -af "$SCRIPT_DIR/piwo.png" "$AVATAR_DEST" || true
+    sudo chmod 644 "$AVATAR_DEST" || true
 
     ACCOUNTS_FILE="/var/lib/AccountsService/users/$CURRENT_USER"
     if [[ -f "$ACCOUNTS_FILE" ]]; then
         if sudo grep -q "^Icon=" "$ACCOUNTS_FILE"; then
-            sudo sed -i "s|^Icon=.*|Icon=$AVATAR_DEST|" "$ACCOUNTS_FILE"
+            sudo sed -i "s|^Icon=.*|Icon=$AVATAR_DEST|" "$ACCOUNTS_FILE" || true
         elif sudo grep -q "^\[User\]" "$ACCOUNTS_FILE"; then
-            sudo sed -i "/^\[User\]/a Icon=$AVATAR_DEST" "$ACCOUNTS_FILE"
+            sudo sed -i "/^\[User\]/a Icon=$AVATAR_DEST" "$ACCOUNTS_FILE" || true
         else
             echo "Icon=$AVATAR_DEST" | sudo tee -a "$ACCOUNTS_FILE" > /dev/null
         fi
