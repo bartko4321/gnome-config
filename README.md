@@ -53,7 +53,7 @@ The script identifies the OS using `/etc/os-release` and selects the correspondi
 
 1. **Clone or download** the repository containing your configuration files.
    ```bash
-   git clone https://github.com/bartko4321/gnome-config.git
+   git clone https://github.com/syscore88/gnome-config.git
    ```
 3. **Grant execution permissions**:
    ```bash
