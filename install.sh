@@ -161,123 +161,53 @@ install_gnome_packages() {
     fi
 }
 
-patch_gdm_login_background() {
+install_gdm_extension() {
     local wallpaper_path="$1"
-    local gresource_path=""
-    local candidate
+    local ext_dir="/usr/local/share/gnome-shell/extensions/gdm-extension@pratap.fastmail.fm"
+    local already_installed=false
+    [[ -d "$ext_dir" ]] && already_installed=true
 
-    for candidate in \
-        /usr/share/gnome-shell/gnome-shell-theme.gresource \
-        /usr/share/themes/*/gnome-shell/gnome-shell-theme.gresource \
-        /usr/share/gnome-shell/theme/gnome-shell-theme.gresource; do
-        if [[ -f "$candidate" ]]; then
-            gresource_path="$candidate"
-            break
-        fi
-    done
-
-    [[ -z "$gresource_path" ]] && return 0
-
-    if ! command -v gresource >/dev/null 2>&1 || ! command -v glib-compile-resources >/dev/null 2>&1; then
-        if [[ "$OS" == *"ubuntu"* || "$OS" == *"debian"* || "$OS_LIKE" == *"ubuntu"* || "$OS_LIKE" == *"debian"* || "$OS" == *"pop"* || "$OS" == *"linuxmint"* ]]; then
-            sudo apt-get install -yq libglib2.0-bin || true
-        elif [[ "$OS" == "fedora" || "$OS_LIKE" == *"fedora"* ]]; then
-            sudo dnf install -yq glib2 || true
-        elif [[ "$OS" == "arch" || "$OS_LIKE" == *"arch"* || "$OS" == "manjaro" ]]; then
-            sudo pacman -S --noconfirm --needed glib2 || true
-        elif [[ "$OS" == *"opensuse"* || "$OS" == *"suse"* || "$OS_LIKE" == *"suse"* ]]; then
-            sudo zypper install -yqn glib2-tools || true
-        fi
+    if [[ "$OS" == *"ubuntu"* || "$OS" == *"debian"* || "$OS_LIKE" == *"ubuntu"* || "$OS_LIKE" == *"debian"* || "$OS" == *"pop"* || "$OS" == *"linuxmint"* ]]; then
+        sudo apt-get install -yq git zip systemd-container || true
+    elif [[ "$OS" == "fedora" || "$OS_LIKE" == *"fedora"* ]]; then
+        sudo dnf install -yq git zip systemd-container || true
+    elif [[ "$OS" == "arch" || "$OS_LIKE" == *"arch"* || "$OS" == "manjaro" ]]; then
+        sudo pacman -S --noconfirm --needed git zip systemd || true
+    elif [[ "$OS" == *"opensuse"* || "$OS" == *"suse"* || "$OS_LIKE" == *"suse"* ]]; then
+        sudo zypper install -yqn git zip systemd-container || true
     fi
 
-    if ! command -v gresource >/dev/null 2>&1 || ! command -v glib-compile-resources >/dev/null 2>&1; then
+    if ! command -v git >/dev/null 2>&1; then
         return 0
     fi
 
-    local backup_path="${gresource_path}.orig-backup"
-    if [[ ! -f "$backup_path" ]]; then
-        sudo cp -af "$gresource_path" "$backup_path" || true
+    if [[ -n "$wallpaper_path" && -f "$wallpaper_path" ]]; then
+        sudo mkdir -p /usr/share/backgrounds/custom || true
+        sudo cp -af "$wallpaper_path" /usr/share/backgrounds/custom/ || true
     fi
 
     local work_dir
-    work_dir="$(mktemp -d /tmp/gdm-theme-patch.XXXXXX)"
-    local extract_root="$work_dir/extract"
-    mkdir -p "$extract_root"
+    work_dir="$(mktemp -d /tmp/gdm-extension.XXXXXX)"
 
-    local res list_file="$work_dir/list.txt"
-    gresource list "$gresource_path" > "$list_file" 2>/dev/null || true
-
-    if [[ ! -s "$list_file" ]]; then
-        rm -rf "$work_dir"
-        return 0
-    fi
-
-    while IFS= read -r res; do
-        [[ -z "$res" ]] && continue
-        mkdir -p "$extract_root/$(dirname "$res")"
-        gresource extract "$gresource_path" "$res" > "$extract_root$res" 2>/dev/null || true
-    done < "$list_file"
-
-    local css_file
-    css_file="$(find "$extract_root" -name "gnome-shell.css" | head -n1)"
-
-    if [[ -z "$css_file" || ! -f "$css_file" ]]; then
-        rm -rf "$work_dir"
-        return 0
-    fi
-
-    local theme_dir
-    theme_dir="$(dirname "$css_file")"
-    cp -af "$wallpaper_path" "$theme_dir/login-wallpaper.png"
-
-    if ! grep -q "login-wallpaper.png" "$css_file"; then
-        python3 - "$css_file" <<'PYEOF' || true
-import re, sys
-path = sys.argv[1]
-with open(path, "r", encoding="utf-8", errors="ignore") as f:
-    css = f.read()
-
-pattern = re.compile(r"#lockDialogGroup\s*\{[^}]*\}", re.DOTALL)
-new_rule = (
-    "#lockDialogGroup {\n"
-    "  background: #2e3436 url(\"login-wallpaper.png\");\n"
-    "  background-size: cover;\n"
-    "  background-repeat: no-repeat;\n"
-    "  background-position: center;\n"
-    "}"
-)
-
-if pattern.search(css):
-    css = pattern.sub(new_rule, css, count=1)
-else:
-    css += "\n" + new_rule + "\n"
-
-with open(path, "w", encoding="utf-8") as f:
-    f.write(css)
-PYEOF
-    fi
-
-    local xml_file="$work_dir/gnome-shell-theme.gresource.xml"
-    {
-        echo '<?xml version="1.0" encoding="UTF-8"?>'
-        echo '<gresources>'
-        echo '  <gresource prefix="/">'
-        while IFS= read -r res; do
-            [[ -z "$res" ]] && continue
-            echo "    <file>${res#/}</file>"
-        done < "$list_file"
-        echo '  </gresource>'
-        echo '</gresources>'
-    } > "$xml_file"
-
-    local compiled="$work_dir/gnome-shell-theme.gresource"
-    if (cd "$extract_root" && glib-compile-resources --sourcedir="$extract_root" --target="$compiled" "$xml_file") 2>/dev/null; then
-        sudo cp -af "$compiled" "$gresource_path" || true
-    else
-        sudo cp -af "$backup_path" "$gresource_path" || true
+    if git clone --depth 1 https://github.com/luicfrr/gdm-extension "$work_dir/gdm-extension" 2>/dev/null; then
+        (cd "$work_dir/gdm-extension" && sudo ./install.sh) || true
     fi
 
     rm -rf "$work_dir"
+
+    if [[ "$already_installed" == true ]]; then
+        hide_gdm_extension_button
+    fi
+}
+
+hide_gdm_extension_button() {
+    local gdm_user="gdm"
+    id "Debian-gdm" >/dev/null 2>&1 && gdm_user="Debian-gdm"
+
+    command -v machinectl >/dev/null 2>&1 || return 0
+
+    sudo machinectl shell "${gdm_user}@" /usr/bin/dconf write /org/gnome/shell/extensions/gdm-extension/hide-gdm-extension-button true >/dev/null 2>&1 || true
+    sudo systemctl restart gdm >/dev/null 2>&1 || true
 }
 
 detect_os
@@ -329,7 +259,7 @@ if [[ -f "$SCRIPT_DIR/login-wallpaper.png" ]]; then
     sudo chmod 755 /usr/share/backgrounds/custom || true
     sudo chmod 644 "$LOGIN_WALLPAPER_PATH" || true
 
-    patch_gdm_login_background "$LOGIN_WALLPAPER_PATH"
+    install_gdm_extension "$LOGIN_WALLPAPER_PATH"
 fi
 
 show_progress 7 $TOTAL_STEPS "$MSG_PHASE_3"
