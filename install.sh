@@ -105,7 +105,6 @@ CURRENT_USER=$(whoami)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 USER_PICTURES="$(xdg-user-dir PICTURES 2>/dev/null || echo "$HOME/Pictures")"
 wallpaper_PATH="$USER_PICTURES/wallpaper.jpg"
-LOGIN_WALLPAPER_PATH="/usr/share/backgrounds/custom/login-wallpaper.png"
 
 if [[ "$EUID" -eq 0 ]]; then
     echo -e "${ERR}✘ Nie uruchamiaj skryptu jako root. Uruchom jako zwykły użytkownik z sudo.${NC}" >&3
@@ -161,55 +160,6 @@ install_gnome_packages() {
     fi
 }
 
-install_gdm_extension() {
-    local wallpaper_path="$1"
-    local ext_dir="/usr/local/share/gnome-shell/extensions/gdm-extension@pratap.fastmail.fm"
-    local already_installed=false
-    [[ -d "$ext_dir" ]] && already_installed=true
-
-    if [[ "$OS" == *"ubuntu"* || "$OS" == *"debian"* || "$OS_LIKE" == *"ubuntu"* || "$OS_LIKE" == *"debian"* || "$OS" == *"pop"* || "$OS" == *"linuxmint"* ]]; then
-        sudo apt-get install -yq git zip systemd-container || true
-    elif [[ "$OS" == "fedora" || "$OS_LIKE" == *"fedora"* ]]; then
-        sudo dnf install -yq git zip systemd-container || true
-    elif [[ "$OS" == "arch" || "$OS_LIKE" == *"arch"* || "$OS" == "manjaro" ]]; then
-        sudo pacman -S --noconfirm --needed git zip systemd || true
-    elif [[ "$OS" == *"opensuse"* || "$OS" == *"suse"* || "$OS_LIKE" == *"suse"* ]]; then
-        sudo zypper install -yqn git zip systemd-container || true
-    fi
-
-    if ! command -v git >/dev/null 2>&1; then
-        return 0
-    fi
-
-    if [[ -n "$wallpaper_path" && -f "$wallpaper_path" ]]; then
-        sudo mkdir -p /usr/share/backgrounds/custom || true
-        sudo cp -af "$wallpaper_path" /usr/share/backgrounds/custom/ || true
-    fi
-
-    local work_dir
-    work_dir="$(mktemp -d /tmp/gdm-extension.XXXXXX)"
-
-    if git clone --depth 1 https://github.com/luicfrr/gdm-extension "$work_dir/gdm-extension" 2>/dev/null; then
-        (cd "$work_dir/gdm-extension" && sudo ./install.sh) || true
-    fi
-
-    rm -rf "$work_dir"
-
-    if [[ "$already_installed" == true ]]; then
-        hide_gdm_extension_button
-    fi
-}
-
-hide_gdm_extension_button() {
-    local gdm_user="gdm"
-    id "Debian-gdm" >/dev/null 2>&1 && gdm_user="Debian-gdm"
-
-    command -v machinectl >/dev/null 2>&1 || return 0
-
-    sudo machinectl shell "${gdm_user}@" /usr/bin/dconf write /org/gnome/shell/extensions/gdm-extension/hide-gdm-extension-button true >/dev/null 2>&1 || true
-    sudo systemctl restart gdm >/dev/null 2>&1 || true
-}
-
 detect_os
 show_progress 2 $TOTAL_STEPS "$MSG_PHASE_2"
 
@@ -245,21 +195,6 @@ if command -v gsettings >/dev/null 2>&1; then
     gsettings set org.gnome.desktop.background picture-uri "file://$wallpaper_PATH" 2>/dev/null \
         && gsettings set org.gnome.desktop.background picture-uri-dark "file://$wallpaper_PATH" 2>/dev/null \
         && gsettings set org.gnome.desktop.background picture-options "zoom" 2>/dev/null || true
-
-    gsettings set org.gnome.desktop.screensaver picture-uri "file://$LOGIN_WALLPAPER_PATH" 2>/dev/null || true
-    gsettings set org.gnome.desktop.screensaver picture-uri-dark "file://$LOGIN_WALLPAPER_PATH" 2>/dev/null || true
-    gsettings set org.gnome.desktop.screensaver picture-options "zoom" 2>/dev/null || true
-fi
-
-show_progress 6 $TOTAL_STEPS "$MSG_PHASE_3"
-
-if [[ -f "$SCRIPT_DIR/login-wallpaper.png" ]]; then
-    sudo mkdir -p /usr/share/backgrounds/custom || true
-    sudo cp -af "$SCRIPT_DIR/login-wallpaper.png" "$LOGIN_WALLPAPER_PATH" || true
-    sudo chmod 755 /usr/share/backgrounds/custom || true
-    sudo chmod 644 "$LOGIN_WALLPAPER_PATH" || true
-
-    install_gdm_extension "$LOGIN_WALLPAPER_PATH"
 fi
 
 show_progress 7 $TOTAL_STEPS "$MSG_PHASE_3"
