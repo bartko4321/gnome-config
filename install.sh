@@ -161,6 +161,125 @@ install_gnome_packages() {
     fi
 }
 
+patch_gdm_login_background() {
+    local wallpaper_path="$1"
+    local gresource_path=""
+    local candidate
+
+    for candidate in \
+        /usr/share/gnome-shell/gnome-shell-theme.gresource \
+        /usr/share/themes/*/gnome-shell/gnome-shell-theme.gresource \
+        /usr/share/gnome-shell/theme/gnome-shell-theme.gresource; do
+        if [[ -f "$candidate" ]]; then
+            gresource_path="$candidate"
+            break
+        fi
+    done
+
+    [[ -z "$gresource_path" ]] && return 0
+
+    if ! command -v gresource >/dev/null 2>&1 || ! command -v glib-compile-resources >/dev/null 2>&1; then
+        if [[ "$OS" == *"ubuntu"* || "$OS" == *"debian"* || "$OS_LIKE" == *"ubuntu"* || "$OS_LIKE" == *"debian"* || "$OS" == *"pop"* || "$OS" == *"linuxmint"* ]]; then
+            sudo apt-get install -yq libglib2.0-bin || true
+        elif [[ "$OS" == "fedora" || "$OS_LIKE" == *"fedora"* ]]; then
+            sudo dnf install -yq glib2 || true
+        elif [[ "$OS" == "arch" || "$OS_LIKE" == *"arch"* || "$OS" == "manjaro" ]]; then
+            sudo pacman -S --noconfirm --needed glib2 || true
+        elif [[ "$OS" == *"opensuse"* || "$OS" == *"suse"* || "$OS_LIKE" == *"suse"* ]]; then
+            sudo zypper install -yqn glib2-tools || true
+        fi
+    fi
+
+    if ! command -v gresource >/dev/null 2>&1 || ! command -v glib-compile-resources >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local backup_path="${gresource_path}.orig-backup"
+    if [[ ! -f "$backup_path" ]]; then
+        sudo cp -af "$gresource_path" "$backup_path" || true
+    fi
+
+    local work_dir
+    work_dir="$(mktemp -d /tmp/gdm-theme-patch.XXXXXX)"
+    local extract_root="$work_dir/extract"
+    mkdir -p "$extract_root"
+
+    local res list_file="$work_dir/list.txt"
+    gresource list "$gresource_path" > "$list_file" 2>/dev/null || true
+
+    if [[ ! -s "$list_file" ]]; then
+        rm -rf "$work_dir"
+        return 0
+    fi
+
+    while IFS= read -r res; do
+        [[ -z "$res" ]] && continue
+        mkdir -p "$extract_root/$(dirname "$res")"
+        gresource extract "$gresource_path" "$res" > "$extract_root$res" 2>/dev/null || true
+    done < "$list_file"
+
+    local css_file
+    css_file="$(find "$extract_root" -name "gnome-shell.css" | head -n1)"
+
+    if [[ -z "$css_file" || ! -f "$css_file" ]]; then
+        rm -rf "$work_dir"
+        return 0
+    fi
+
+    local theme_dir
+    theme_dir="$(dirname "$css_file")"
+    cp -af "$wallpaper_path" "$theme_dir/login-wallpaper.png"
+
+    if ! grep -q "login-wallpaper.png" "$css_file"; then
+        python3 - "$css_file" <<'PYEOF' || true
+import re, sys
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8", errors="ignore") as f:
+    css = f.read()
+
+pattern = re.compile(r"#lockDialogGroup\s*\{[^}]*\}", re.DOTALL)
+new_rule = (
+    "#lockDialogGroup {\n"
+    "  background: #2e3436 url(\"login-wallpaper.png\");\n"
+    "  background-size: cover;\n"
+    "  background-repeat: no-repeat;\n"
+    "  background-position: center;\n"
+    "}"
+)
+
+if pattern.search(css):
+    css = pattern.sub(new_rule, css, count=1)
+else:
+    css += "\n" + new_rule + "\n"
+
+with open(path, "w", encoding="utf-8") as f:
+    f.write(css)
+PYEOF
+    fi
+
+    local xml_file="$work_dir/gnome-shell-theme.gresource.xml"
+    {
+        echo '<?xml version="1.0" encoding="UTF-8"?>'
+        echo '<gresources>'
+        echo '  <gresource prefix="/">'
+        while IFS= read -r res; do
+            [[ -z "$res" ]] && continue
+            echo "    <file>${res#/}</file>"
+        done < "$list_file"
+        echo '  </gresource>'
+        echo '</gresources>'
+    } > "$xml_file"
+
+    local compiled="$work_dir/gnome-shell-theme.gresource"
+    if (cd "$extract_root" && glib-compile-resources --sourcedir="$extract_root" --target="$compiled" "$xml_file") 2>/dev/null; then
+        sudo cp -af "$compiled" "$gresource_path" || true
+    else
+        sudo cp -af "$backup_path" "$gresource_path" || true
+    fi
+
+    rm -rf "$work_dir"
+}
+
 detect_os
 show_progress 2 $TOTAL_STEPS "$MSG_PHASE_2"
 
@@ -210,24 +329,7 @@ if [[ -f "$SCRIPT_DIR/login-wallpaper.png" ]]; then
     sudo chmod 755 /usr/share/backgrounds/custom || true
     sudo chmod 644 "$LOGIN_WALLPAPER_PATH" || true
 
-    sudo mkdir -p /etc/dconf/profile /etc/dconf/db/gdm.d || true
-
-    if [[ ! -f /etc/dconf/profile/gdm ]]; then
-        cat <<'EOF' | sudo tee /etc/dconf/profile/gdm > /dev/null
-user-db:user
-system-db:gdm
-file-db:/usr/share/gdm/greeter-dconf-defaults
-EOF
-    fi
-
-    cat <<EOF | sudo tee /etc/dconf/db/gdm.d/01-login-background > /dev/null
-[org/gnome/desktop/background]
-picture-uri='file://$LOGIN_WALLPAPER_PATH'
-picture-uri-dark='file://$LOGIN_WALLPAPER_PATH'
-picture-options='zoom'
-EOF
-
-    sudo dconf update || true
+    patch_gdm_login_background "$LOGIN_WALLPAPER_PATH"
 fi
 
 show_progress 7 $TOTAL_STEPS "$MSG_PHASE_3"
