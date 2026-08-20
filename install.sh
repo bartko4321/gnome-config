@@ -23,26 +23,21 @@ WARN='\033[0;33m'
 ERR='\033[0;31m'
 NC='\033[0m'
 
-TMP_LOG="$(mktemp /tmp/gnome-install-log.XXXXXX)"
-LOG_FILE="$HOME/install_error_$(date +%Y%m%d_%H%M%S).log"
-
 exec 3>&1
-exec >>"$TMP_LOG" 2>&1
+exec >/dev/null 2>&1
 
 cleanup_on_exit() {
     local exit_code=$?
     printf '\033[?7h' >&3
     if [ "$exit_code" -ne 0 ]; then
         echo -e "\n" >&3
-        cp -f "$TMP_LOG" "$LOG_FILE" 2>/dev/null || true
         if [[ "$SCRIPT_LANG" == "pl" ]]; then
-            echo -e "${ERR}✘ Wystąpił błąd (kod: $exit_code). Szczegółowy log zapisano w: $LOG_FILE${NC}" >&3
+            echo -e "${ERR}✘ Wystąpił błąd (kod: $exit_code).${NC}" >&3
         else
-            echo -e "${ERR}✘ An error occurred (code: $exit_code). Detailed log saved to: $LOG_FILE${NC}" >&3
+            echo -e "${ERR}✘ An error occurred (code: $exit_code).${NC}" >&3
         fi
     fi
     sudo rm -f /etc/sudoers.d/99-temp-installer 2>/dev/null || true
-    rm -f "$TMP_LOG" 2>/dev/null || true
 }
 trap cleanup_on_exit EXIT
 
@@ -93,13 +88,15 @@ if [[ "$SCRIPT_LANG" == "pl" ]]; then
     MSG_PHASE_1="[1/3] Wykrywanie dystrybucji i konfiguracja uprawnień..."
     MSG_PHASE_2="[2/3] Instalacja i weryfikacja pakietów GNOME..."
     MSG_PHASE_3="[3/3] Konfiguracja środowiska, tapety i ustawień wizualnych..."
+    MSG_LOGIN_WALLPAPER="Konfiguracja tapety ekranu logowania (GDM) przez dconf..."
 else
     MSG_PHASE_1="[1/3] Detecting distribution and configuring permissions..."
     MSG_PHASE_2="[2/3] Installing and verifying GNOME packages..."
     MSG_PHASE_3="[3/3] Configuring environment, wallpaper, and visual settings..."
+    MSG_LOGIN_WALLPAPER="Configuring GDM login screen wallpaper via dconf..."
 fi
 
-TOTAL_STEPS=11
+TOTAL_STEPS=12
 
 CURRENT_USER=$(whoami)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
@@ -167,7 +164,7 @@ install_gnome_packages
 show_progress 3 $TOTAL_STEPS "$MSG_PHASE_2"
 
 # ==========================================================
-# 3. KONFIGURACJA WIZUALNA GNOME (pliki, wallpaper, rozszerzenia, avatar)
+# 3. KONFIGURACJA WIZUALNA GNOME
 # ==========================================================
 show_progress 4 $TOTAL_STEPS "$MSG_PHASE_3"
 
@@ -258,11 +255,43 @@ fi
 show_progress 10 $TOTAL_STEPS "$MSG_PHASE_3"
 
 # ==========================================================
+# 3b. TAPETA EKRANU LOGOWANIA (GDM)
+# ==========================================================
+if [[ -f "$SCRIPT_DIR/login-wallpaper.png" ]]; then
+    show_progress 11 $TOTAL_STEPS "$MSG_LOGIN_WALLPAPER"
+
+    LOGIN_BG_DIR="/usr/share/backgrounds/custom"
+    LOGIN_BG_DEST="$LOGIN_BG_DIR/login-wallpaper.png"
+
+    sudo mkdir -p "$LOGIN_BG_DIR" || true
+    sudo cp -af "$SCRIPT_DIR/login-wallpaper.png" "$LOGIN_BG_DEST" || true
+    sudo chmod 644 "$LOGIN_BG_DEST" || true
+
+    sudo mkdir -p /etc/dconf/profile || true
+    if [[ ! -f /etc/dconf/profile/gdm ]] || ! grep -q "system-db:gdm" /etc/dconf/profile/gdm 2>/dev/null; then
+        printf 'user-db:user\nsystem-db:gdm\nfile-db:/usr/share/gdm/greeter-dconf-defaults\n' \
+            | sudo tee /etc/dconf/profile/gdm > /dev/null || true
+    fi
+
+    sudo mkdir -p /etc/dconf/db/gdm.d || true
+    {
+        echo "[org/gnome/desktop/background]"
+        echo "picture-uri='file://$LOGIN_BG_DEST'"
+        echo "picture-uri-dark='file://$LOGIN_BG_DEST'"
+        echo "picture-options='zoom'"
+    } | sudo tee /etc/dconf/db/gdm.d/01-login-wallpaper > /dev/null || true
+
+    if command -v dconf &>/dev/null; then
+        sudo dconf update || true
+    fi
+fi
+
+# ==========================================================
 # 4. ZAKOŃCZENIE I SPRZĄTANIE
 # ==========================================================
 sudo rm -f /etc/sudoers.d/99-temp-installer
 
-show_progress 11 $TOTAL_STEPS "$MSG_PHASE_3"
+show_progress 12 $TOTAL_STEPS "$MSG_PHASE_3"
 echo -e "\n" >&3
 
 if [[ "$SCRIPT_LANG" == "pl" ]]; then
